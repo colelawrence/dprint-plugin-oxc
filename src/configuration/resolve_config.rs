@@ -75,6 +75,11 @@ pub fn resolve_config(
     embedded_language_formatting: get_nullable_value(&mut config, "embeddedLanguageFormatting", &mut diagnostics),
     experimental_operator_position: get_nullable_value(&mut config, "experimentalOperatorPosition", &mut diagnostics),
     experimental_ternaries: get_nullable_value(&mut config, "experimentalTernaries", &mut diagnostics),
+    experimental_bare_yield_snippets: get_nullable_value(
+      &mut config,
+      "experimentalBareYieldSnippets",
+      &mut diagnostics,
+    ),
     experimental_sort_imports: resolve_sort_imports_options(&mut config, &mut diagnostics),
     experimental_tailwindcss: resolve_tailwindcss_options(&mut config, &mut diagnostics),
   };
@@ -148,7 +153,10 @@ fn resolve_sort_imports_options(
         .into_iter()
         .filter_map(|v| {
           let mut obj = v.into_object()?;
-          let group_name = obj.shift_remove("groupName").and_then(|v| v.into_string()).unwrap_or_default();
+          let group_name = obj
+            .shift_remove("groupName")
+            .and_then(|v| v.into_string())
+            .unwrap_or_default();
           let element_name_pattern = obj
             .shift_remove("elementNamePattern")
             .and_then(|v| v.into_array())

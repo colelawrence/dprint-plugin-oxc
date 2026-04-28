@@ -182,6 +182,7 @@ pub struct Configuration {
   pub embedded_language_formatting: Option<EmbeddedLanguageFormatting>,
   pub experimental_operator_position: Option<OperatorPosition>,
   pub experimental_ternaries: Option<bool>,
+  pub experimental_bare_yield_snippets: Option<bool>,
   pub experimental_sort_imports: Option<SortImportsOptions>,
   pub experimental_tailwindcss: Option<TailwindcssOptions>,
 }

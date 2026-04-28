@@ -1,0 +1,12 @@
+~~ experimentalBareYieldSnippets: true ~~
+== should format bare yield star snippets ==
+yield* myThing()
+
+[expect]
+yield* myThing();
+
+== should format bare yield snippets ==
+yield myThing()
+
+[expect]
+yield myThing();

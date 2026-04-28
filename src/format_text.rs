@@ -3,10 +3,12 @@ use anyhow::bail;
 use oxc_allocator::Allocator;
 use oxc_formatter::ArrowParentheses;
 use oxc_formatter::AttributePosition;
+use oxc_formatter::CustomGroupDefinition;
 use oxc_formatter::EmbeddedLanguageFormatting;
 use oxc_formatter::Expand;
 use oxc_formatter::FormatOptions;
 use oxc_formatter::Formatter;
+use oxc_formatter::GroupEntry;
 use oxc_formatter::IndentStyle;
 use oxc_formatter::IndentWidth;
 use oxc_formatter::LineEnding;
@@ -15,8 +17,6 @@ use oxc_formatter::OperatorPosition;
 use oxc_formatter::QuoteProperties;
 use oxc_formatter::QuoteStyle;
 use oxc_formatter::Semicolons;
-use oxc_formatter::CustomGroupDefinition;
-use oxc_formatter::GroupEntry;
 use oxc_formatter::SortImportsOptions;
 use oxc_formatter::SortOrder;
 use oxc_formatter::SortTailwindcssOptions;
@@ -34,6 +34,40 @@ pub fn format_text(file_path: &Path, input_text: &str, config: &Configuration) -
     Err(_) => return Ok(None),
   };
 
+  let output = if config.experimental_bare_yield_snippets.unwrap_or(false) && is_bare_yield_snippet(input_text) {
+    match format_bare_yield_snippet(input_text, source_type, config) {
+      Some(result) => result?,
+      None => format_program_or_bail(input_text, source_type, config)?,
+    }
+  } else {
+    match format_program(input_text, source_type, config) {
+      Ok(output) => output,
+      Err(error_text) => {
+        if config.experimental_bare_yield_snippets.unwrap_or(false) && input_text.contains("yield") {
+          format_bare_yield_snippet(input_text, source_type, config).unwrap_or_else(|| bail!("{}", error_text))?
+        } else {
+          bail!("{}", error_text);
+        }
+      }
+    }
+  };
+
+  if output == input_text {
+    Ok(None)
+  } else {
+    Ok(Some(output))
+  }
+}
+
+fn format_program_or_bail(input_text: &str, source_type: SourceType, config: &Configuration) -> Result<String> {
+  format_program(input_text, source_type, config).map_err(|error_text| anyhow::anyhow!(error_text))
+}
+
+fn format_program(
+  input_text: &str,
+  source_type: SourceType,
+  config: &Configuration,
+) -> std::result::Result<String, String> {
   let allocator = Allocator::default();
   let parse_options = ParseOptions {
     preserve_parens: false,
@@ -44,25 +78,70 @@ pub fn format_text(file_path: &Path, input_text: &str, config: &Configuration) -
     .parse();
 
   if !parsed.errors.is_empty() {
-    let mut error_text = String::new();
-    for (i, error) in parsed.errors.iter().enumerate() {
-      if i > 0 {
-        error_text.push('\n');
-      }
-      error_text.push_str(&error.to_string());
-    }
-    bail!("{}", error_text);
+    return Err(format_parse_errors(&parsed.errors));
   }
 
   let options = build_format_options(config);
   let formatter = Formatter::new(&allocator, options);
-  let output = formatter.build(&parsed.program);
+  Ok(formatter.build(&parsed.program))
+}
 
-  if output == input_text {
-    Ok(None)
-  } else {
-    Ok(Some(output))
+fn format_parse_errors<T: std::fmt::Display>(errors: &[T]) -> String {
+  let mut error_text = String::new();
+  for (i, error) in errors.iter().enumerate() {
+    if i > 0 {
+      error_text.push('\n');
+    }
+    error_text.push_str(&error.to_string());
   }
+  error_text
+}
+
+fn is_bare_yield_snippet(input_text: &str) -> bool {
+  input_text.trim_start().starts_with("yield")
+}
+
+fn format_bare_yield_snippet(
+  input_text: &str,
+  source_type: SourceType,
+  config: &Configuration,
+) -> Option<Result<String>> {
+  let wrapped = format!(
+    "function* __dprint_bare_yield_snippet__() {{\n{}\n}}\n",
+    input_text.trim()
+  );
+  let formatted = format_program(&wrapped, source_type, config).ok()?;
+  Some(
+    extract_wrapped_generator_body(&formatted)
+      .ok_or_else(|| anyhow::anyhow!("Failed to extract formatted bare yield snippet.")),
+  )
+}
+
+fn extract_wrapped_generator_body(formatted: &str) -> Option<String> {
+  let body_start = formatted.find("{\n")? + 2;
+  let body_end = formatted.rfind("\n}")?;
+  let body = &formatted[body_start..body_end];
+  let indent = body
+    .lines()
+    .find_map(|line| {
+      if line.trim().is_empty() {
+        None
+      } else {
+        Some(&line[..line.len() - line.trim_start().len()])
+      }
+    })
+    .unwrap_or("");
+
+  let mut result = String::new();
+  for line in body.lines() {
+    if let Some(stripped) = line.strip_prefix(indent) {
+      result.push_str(stripped);
+    } else {
+      result.push_str(line);
+    }
+    result.push('\n');
+  }
+  Some(result)
 }
 
 fn build_format_options(config: &Configuration) -> FormatOptions {
@@ -84,14 +163,16 @@ fn build_format_options(config: &Configuration) -> FormatOptions {
   }
 
   if let Some(value) = config.indent_width
-    && let Ok(width) = IndentWidth::try_from(value) {
-      options.indent_width = width;
-    }
+    && let Ok(width) = IndentWidth::try_from(value)
+  {
+    options.indent_width = width;
+  }
 
   if let Some(value) = config.line_width
-    && let Ok(width) = LineWidth::try_from(value) {
-      options.line_width = width;
-    }
+    && let Ok(width) = LineWidth::try_from(value)
+  {
+    options.line_width = width;
+  }
 
   if let Some(semicolons) = config.semicolons {
     options.semicolons = match semicolons {
@@ -192,9 +273,11 @@ fn build_format_options(config: &Configuration) -> FormatOptions {
       ignore_case: sort_imports.ignore_case.unwrap_or(true),
       newlines_between: sort_imports.newlines_between.unwrap_or(true),
       internal_pattern: sort_imports.internal_pattern.clone(),
-      groups: sort_imports.groups.iter().map(|group| {
-        group.iter().map(|s| GroupEntry::parse(s)).collect()
-      }).collect(),
+      groups: sort_imports
+        .groups
+        .iter()
+        .map(|group| group.iter().map(|s| GroupEntry::parse(s)).collect())
+        .collect(),
       custom_groups: sort_imports
         .custom_groups
         .iter()
@@ -234,5 +317,28 @@ mod test {
       .unwrap()
       .unwrap();
     assert_eq!(result, "const x = 1;\n");
+  }
+
+  #[test]
+  fn formats_bare_yield_star_snippet_when_enabled() {
+    let input = "yield* myThing()";
+    let config = crate::configuration::Configuration {
+      experimental_bare_yield_snippets: Some(true),
+      ..Default::default()
+    };
+    let result = format_text(std::path::Path::new("test.ts"), input, &config)
+      .unwrap()
+      .unwrap();
+    assert_eq!(result, "yield* myThing();\n");
+  }
+
+  #[test]
+  fn bare_yield_star_snippet_is_interpreted_as_multiply_by_default() {
+    let input = "yield* myThing()";
+    let config = crate::configuration::Configuration::default();
+    let result = format_text(std::path::Path::new("test.ts"), input, &config)
+      .unwrap()
+      .unwrap();
+    assert_eq!(result, "yield * myThing();\n");
   }
 }

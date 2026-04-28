@@ -181,6 +181,11 @@
       "type": "boolean",
       "default": false
     },
+    "experimentalBareYieldSnippets": {
+      "description": "[EXPERIMENTAL] Allows standalone snippets containing yield/yield* to be formatted by temporarily parsing them as the body of a generator function.",
+      "type": "boolean",
+      "default": false
+    },
     "experimentalSortImports": {
       "description": "[EXPERIMENTAL] Sort import statements. When set, enables import sorting with the specified options.",
       "type": "object",
