@@ -41,6 +41,21 @@ generate_str_to_from![QuoteStyle, [Single, "single"], [Double, "double"]];
 
 #[derive(Clone, PartialEq, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum StringQuoteStyle {
+  Single,
+  Double,
+  AlwaysDouble,
+}
+
+generate_str_to_from![
+  StringQuoteStyle,
+  [Single, "single"],
+  [Double, "double"],
+  [AlwaysDouble, "alwaysDouble"]
+];
+
+#[derive(Clone, PartialEq, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum QuoteProperties {
   AsNeeded,
   Preserve,
@@ -170,7 +185,7 @@ pub struct Configuration {
   pub indent_width: Option<u8>,
   pub line_width: Option<u16>,
   pub semicolons: Option<Semicolons>,
-  pub quote_style: Option<QuoteStyle>,
+  pub quote_style: Option<StringQuoteStyle>,
   pub jsx_quote_style: Option<QuoteStyle>,
   pub quote_properties: Option<QuoteProperties>,
   pub arrow_parentheses: Option<ArrowParentheses>,

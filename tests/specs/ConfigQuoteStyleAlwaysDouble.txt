@@ -1,0 +1,18 @@
+~~ quoteStyle: alwaysDouble ~~
+== forces double quotes even when single quotes would reduce escapes ==
+const quoted = "He said \"yes\"";
+const apostrophe = 'don\'t';
+const mixed = "He said \"yes\" and don't";
+const escaped = 'He said \"yes\" and don\'t';
+const backslash = 'C:\\Users\\Cole';
+const dense = 'She said \"don\'t\" near C:\\Temp\\file';
+const preservedEscapes = '\\n \\t \' single and \"double\"';
+
+[expect]
+const quoted = "He said \"yes\"";
+const apostrophe = "don't";
+const mixed = "He said \"yes\" and don't";
+const escaped = "He said \"yes\" and don't";
+const backslash = "C:\\Users\\Cole";
+const dense = "She said \"don't\" near C:\\Temp\\file";
+const preservedEscapes = "\\n \\t ' single and \"double\"";

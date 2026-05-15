@@ -58,10 +58,13 @@
       "default": "double",
       "oneOf": [{
         "const": "double",
-        "description": "Use double quotes."
+        "description": "Prefer double quotes, but use single quotes when they avoid more escaping."
       }, {
         "const": "single",
-        "description": "Use single quotes."
+        "description": "Prefer single quotes, but use double quotes when they avoid more escaping."
+      }, {
+        "const": "alwaysDouble",
+        "description": "Always use double quotes for string literals, escaping double quotes instead of falling back to single quotes."
       }]
     },
     "jsxQuoteStyle": {

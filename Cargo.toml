@@ -27,6 +27,8 @@ wasm = ["serde_json", "dprint-core/wasm"]
 anyhow = "1.0.51"
 dprint-core = { version = "0.67.4", default-features = false }
 oxc_allocator = { git = "https://github.com/oxc-project/oxc", tag = "crates_v0.128.0" }
+oxc_ast = { git = "https://github.com/oxc-project/oxc", tag = "crates_v0.128.0" }
+oxc_ast_visit = { git = "https://github.com/oxc-project/oxc", tag = "crates_v0.128.0" }
 oxc_formatter = { git = "https://github.com/oxc-project/oxc", tag = "crates_v0.128.0" }
 oxc_parser = { git = "https://github.com/oxc-project/oxc", tag = "crates_v0.128.0" }
 oxc_span = { git = "https://github.com/oxc-project/oxc", tag = "crates_v0.128.0" }

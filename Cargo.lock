@@ -172,6 +172,8 @@ dependencies = [
  "dprint-core",
  "dprint-development",
  "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
  "oxc_formatter",
  "oxc_parser",
  "oxc_span",
@@ -418,6 +420,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "oxc_ast_visit"
+version = "0.128.0"
+source = "git+https://github.com/oxc-project/oxc?tag=crates_v0.128.0#9951013eceef29417ff458894f004113b7bf3d52"
+dependencies = [
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_span",
+ "oxc_syntax",
 ]
 
 [[package]]

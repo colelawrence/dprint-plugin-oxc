@@ -1,6 +1,10 @@
 use anyhow::Result;
 use anyhow::bail;
 use oxc_allocator::Allocator;
+use oxc_ast::ast::JSXAttributeValue;
+use oxc_ast::ast::Program;
+use oxc_ast::ast::StringLiteral;
+use oxc_ast_visit::Visit;
 use oxc_formatter::ArrowParentheses;
 use oxc_formatter::AttributePosition;
 use oxc_formatter::CustomGroupDefinition;
@@ -24,9 +28,11 @@ use oxc_formatter::TrailingCommas;
 use oxc_parser::ParseOptions;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
+use oxc_span::Span;
 use std::path::Path;
 
 use crate::configuration::Configuration;
+use crate::configuration::StringQuoteStyle;
 
 pub fn format_text(file_path: &Path, input_text: &str, config: &Configuration) -> Result<Option<String>> {
   let source_type = match SourceType::from_path(file_path) {
@@ -83,7 +89,12 @@ fn format_program(
 
   let options = build_format_options(config);
   let formatter = Formatter::new(&allocator, options);
-  Ok(formatter.build(&parsed.program))
+  let output = formatter.build(&parsed.program);
+  if config.quote_style == Some(StringQuoteStyle::AlwaysDouble) {
+    enforce_always_double_quote_style(&output, source_type)
+  } else {
+    Ok(output)
+  }
 }
 
 fn format_parse_errors<T: std::fmt::Display>(errors: &[T]) -> String {
@@ -95,6 +106,98 @@ fn format_parse_errors<T: std::fmt::Display>(errors: &[T]) -> String {
     error_text.push_str(&error.to_string());
   }
   error_text
+}
+
+fn enforce_always_double_quote_style(input_text: &str, source_type: SourceType) -> std::result::Result<String, String> {
+  // `alwaysDouble` is opt-in, so the extra parse keeps rewriting syntax-aware without affecting the default path.
+  let allocator = Allocator::default();
+  let parsed = Parser::new(&allocator, input_text, source_type).parse();
+  if !parsed.errors.is_empty() {
+    return Err(format_parse_errors(&parsed.errors));
+  }
+
+  let spans = collect_string_literal_spans(&parsed.program);
+  let mut replacements = Vec::new();
+  for span in spans {
+    let start = span.start as usize;
+    let end = span.end as usize;
+    let raw = &input_text[start..end];
+    if let Some(double_quoted) = quote_single_string_literal_as_double(raw) {
+      replacements.push((start, end, double_quoted));
+    }
+  }
+
+  if replacements.is_empty() {
+    return Ok(input_text.to_string());
+  }
+
+  replacements.sort_by_key(|(start, _, _)| *start);
+  let mut output = input_text.to_string();
+  for (start, end, replacement) in replacements.into_iter().rev() {
+    output.replace_range(start..end, &replacement);
+  }
+  Ok(output)
+}
+
+fn collect_string_literal_spans(program: &Program) -> Vec<Span> {
+  let mut collector = StringLiteralSpanCollector { spans: Vec::new() };
+  collector.visit_program(program);
+  collector.spans
+}
+
+struct StringLiteralSpanCollector {
+  spans: Vec<Span>,
+}
+
+impl<'a> Visit<'a> for StringLiteralSpanCollector {
+  fn visit_string_literal(&mut self, literal: &StringLiteral<'a>) {
+    self.spans.push(literal.span);
+  }
+
+  fn visit_jsx_attribute_value(&mut self, value: &JSXAttributeValue<'a>) {
+    match value {
+      JSXAttributeValue::StringLiteral(_) => {}
+      JSXAttributeValue::ExpressionContainer(container) => self.visit_jsx_expression_container(container),
+      JSXAttributeValue::Element(element) => self.visit_jsx_element(element),
+      JSXAttributeValue::Fragment(fragment) => self.visit_jsx_fragment(fragment),
+    }
+  }
+}
+
+fn quote_single_string_literal_as_double(raw: &str) -> Option<String> {
+  if !raw.starts_with('\'') || !raw.ends_with('\'') {
+    return None;
+  }
+
+  let content = &raw[1..raw.len() - 1];
+  let mut output = String::with_capacity(raw.len() + 2);
+  output.push('"');
+
+  let mut copy_start = 0;
+  let mut bytes = content.bytes().enumerate().peekable();
+  while let Some((byte_index, byte)) = bytes.next() {
+    match byte {
+      b'\\' => {
+        if let Some(&(escaped_index, escaped)) = bytes.peek() {
+          bytes.next();
+          if escaped == b'\'' {
+            output.push_str(&content[copy_start..byte_index]);
+            copy_start = escaped_index;
+          }
+        }
+      }
+      b'"' => {
+        output.push_str(&content[copy_start..byte_index]);
+        output.push('\\');
+        copy_start = byte_index;
+      }
+      _ => {}
+    }
+  }
+
+  output.push_str(&content[copy_start..]);
+  output.push('"');
+  Some(output)
 }
 
 fn is_bare_yield_snippet(input_text: &str) -> bool {
@@ -183,8 +286,8 @@ fn build_format_options(config: &Configuration) -> FormatOptions {
 
   if let Some(quote_style) = config.quote_style {
     options.quote_style = match quote_style {
-      crate::configuration::QuoteStyle::Single => QuoteStyle::Single,
-      crate::configuration::QuoteStyle::Double => QuoteStyle::Double,
+      StringQuoteStyle::Single => QuoteStyle::Single,
+      StringQuoteStyle::Double | StringQuoteStyle::AlwaysDouble => QuoteStyle::Double,
     };
   }
 

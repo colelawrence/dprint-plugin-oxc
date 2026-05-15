@@ -1,0 +1,7 @@
+-- file.tsx --
+~~ quoteStyle: alwaysDouble, jsxQuoteStyle: single ~~
+== does not force JSX attribute quotes ==
+const element = <div title="He said &quot;yes&quot;" value={"He said \"yes\""} />;
+
+[expect]
+const element = <div title='He said "yes"' value={"He said \"yes\""} />;

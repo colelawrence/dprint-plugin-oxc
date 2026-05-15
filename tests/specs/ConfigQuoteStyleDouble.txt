@@ -1,0 +1,6 @@
+~~ quoteStyle: double ~~
+== existing double quote style still minimizes escaping ==
+const quoted = "He said \"yes\"";
+
+[expect]
+const quoted = 'He said "yes"';
